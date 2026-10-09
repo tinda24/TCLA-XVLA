@@ -11,9 +11,7 @@ def main():
         description="Train XVLA-TCLA on RoboTwin or Franka."
     )
     parser.add_argument("--config", required=True)
-    parser.add_argument(
-        "--mode", choices=["raw", "latent", "latent_joint"], required=True
-    )
+    parser.add_argument("--mode", choices=["raw", "latent"], required=True)
     parser.add_argument("--print_config", action="store_true")
     parser.add_argument(
         "overrides", nargs="*", help="YAML overrides, e.g. training.iters=50000"
@@ -27,7 +25,6 @@ def main():
     modules = {
         "raw": "train_raw",
         "latent": "train_latent",
-        "latent_joint": "train_latent_joint_ae",
     }
     importlib.import_module(modules[cfg.mode]).main(resolved)
 

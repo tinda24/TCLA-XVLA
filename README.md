@@ -14,12 +14,11 @@ compression, trajectory-conditioned decoding, and independent AE training.
 | --- | --- | --- | --- |
 | `raw` | Absolute joint actions and gripper | Not loaded; no AE checkpoint or statistics required | One physical action per request |
 | `latent` | AE latent tokens, with an optional decoded-action loss | Pretrained and frozen | Latent tokens decoded to physical actions |
-| `latent_joint` | Latent policy loss plus AE reconstruction, progress and dynamics losses | Trained jointly; EMA target encoder stays frozen | Uses the jointly trained AE bundled in the policy checkpoint |
 
 Raw RoboTwin uses 14 channels: left arm (6), left gripper, right arm (6), right
 gripper. Franka uses 8 channels: seven joints and gripper. Raw joint losses retain
 X-VLA's MSE for joints and BCE for grippers; training gripper targets must be in
-`[0, 1]`. Both latent modes use the AE's action mean/std normalization.
+`[0, 1]`. Latent mode uses the AE's action mean/std normalization.
 
 ## Installation
 
@@ -73,7 +72,7 @@ Each task is a directory containing `episode_0.hdf5`, `episode_1.hdf5`, etc.
 | `task_emb` for AE/latent | Required, `[384]` or `[1, 384]` | Computed from task prompts using the AE configuration |
 
 AE training does not read images. Raw training does not read `task_emb`.
-The AE reserves `episode_0` for validation. Franka AE and joint training require
+The AE reserves `episode_0` for validation. Franka AE training requires
 two complete chunks per episode (64 steps with the default chunk size).
 For policy training, set `data.task_names=null` to discover all task directories,
 including a 50-task RoboTwin dataset. AE tasks are set separately by `task_name`.
@@ -124,19 +123,16 @@ policy uses absolute actions and requires latent width >= physical action width.
 ```bash
 bash scripts/train_policy.sh robotwin raw 0
 bash scripts/train_policy.sh robotwin latent 0
-bash scripts/train_policy.sh robotwin latent_joint 0
 bash scripts/train_policy.sh franka raw 0
 bash scripts/train_policy.sh franka latent 0
-bash scripts/train_policy.sh franka latent_joint 0
 bash scripts/train_policy.sh robotwin latent 0,1 action_ae.step=160000 training.batch_size=16
 ```
 
 `training.batch_size` is per GPU. `MAIN_PROCESS_PORT` selects the distributed port;
 `MIXED_PRECISION=bf16` enables policy mixed precision while AE operations stay fp32.
 `training.freeze_steps` controls the initial VLA backbone learning-rate freeze,
-not the AE. The AE is frozen for all of `latent` training and trainable throughout
-`latent_joint`. `latent.decoded_loss_coef=0` disables the decoded-action training
-loss. Joint AE learning rate and auxiliary loss weights are under `joint_ae`.
+not the AE. The AE is frozen for all of `latent` training.
+`latent.decoded_loss_coef=0` disables the decoded-action training loss.
 
 ```bash
 python train.py --config configs/policy/franka.yaml --mode latent --print_config
@@ -156,7 +152,7 @@ python serve.py --checkpoint results/robotwin_policy/latent/ckpt-50000 --port 80
 python -m evaluation.robotwin --task adjust_bottle --episodes 50 --save_video
 ```
 
-The server detects raw/latent/joint mode from the checkpoint. Without
+The server detects raw or latent mode from the checkpoint. Without
 `--checkpoint`, it uses `paths.policy_checkpoint`. `--steps` sets VLA denoising
 steps; `--execute_steps` controls how many actions are used before replanning
 (default: the complete chunk). Launch the RoboTwin evaluator from this directory

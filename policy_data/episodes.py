@@ -50,6 +50,8 @@ def slice_with_padding(array, start, length):
 class PolicyDataset(IterableDataset):
     def __init__(self, args, *, chunk_size, action_ae=None, rank=0, world_size=1):
         self.platform, self.mode = args.dataset, args.mode
+        if self.mode not in {"raw", "latent"}:
+            raise ValueError("mode must be raw or latent")
         self.camera_names = list(args.camera_names)
         self.chunk_size, self.domain_id, self.action_dim = (
             chunk_size,
@@ -152,7 +154,7 @@ class PolicyDataset(IterableDataset):
             raise ValueError(
                 f"Expected aligned [T, {self.action_dim}] actions and qpos: {path}"
             )
-        needed = self.chunk_size * (2 if self.mode == "latent_joint" else 1)
+        needed = self.chunk_size
         if not len(action) or (self.platform == "franka" and len(action) < needed):
             raise ValueError(f"Episode too short for {needed} action steps: {path}")
         if any(len(image) != len(action) for image in images.values()):
@@ -192,7 +194,7 @@ class PolicyDataset(IterableDataset):
         length = len(episode["action"])
         last = length - 1
         if self.platform == "franka":
-            last = length - self.chunk_size * (2 if self.mode == "latent_joint" else 1)
+            last = length - self.chunk_size
         start = self.rng.randint(0, last)
         task = episode["task"]
         if self.platform == "franka":
@@ -226,15 +228,6 @@ class PolicyDataset(IterableDataset):
                 task_emb=torch.from_numpy(episode["task_emb"]),
                 traj_a_freq=torch.from_numpy(episode["freq"][max(start - 1, 0)]),
                 traj_a_len=torch.tensor(start, dtype=torch.long),
-            )
-        if self.mode == "latent_joint":
-            sample.update(
-                next_raw_action_norm=torch.from_numpy(
-                    slice_with_padding(
-                        episode["action_norm"], start + self.chunk_size, self.chunk_size
-                    )
-                ),
-                total_length=torch.tensor(length, dtype=torch.long),
             )
         return sample
 

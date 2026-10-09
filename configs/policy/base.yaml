@@ -22,8 +22,3 @@ action_ae:
 latent:
   latent_loss_coef: 1.0
   decoded_loss_coef: 0.1
-joint_ae:
-  action_ae_learning_rate: 1e-5
-  action_ae_reconstruction_coef: 1.0
-  action_ae_progress_coef: 1.0
-  action_ae_dynamics_coef: 1.0

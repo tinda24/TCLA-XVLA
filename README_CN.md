@@ -7,17 +7,16 @@ XVLA-TCLA 将 TCLA v3 动作自编码器集成到 [X-VLA](https://github.com/2to
 视觉语言骨干和软提示策略 Transformer 来自 X-VLA；TCLA 增加了动作压缩、轨迹条件解码，
 以及可在本项目内独立运行的 AE 训练流程。
 
-## 三种训练模式
+## 两种训练模式
 
 | 模式 | 训练目标 | Autoencoder 状态 | 推理输出 |
 | --- | --- | --- | --- |
 | `raw` | 绝对关节动作及夹爪动作 | 不加载，不需要 AE 权重或统计文件 | 每次请求返回一个物理动作 |
 | `latent` | AE 潜变量，可附加解码动作损失 | 加载预训练 AE，全程冻结 | 潜变量经 AE 解码为物理动作 |
-| `latent_joint` | 策略损失，以及 AE 重建、进度、动力学损失 | AE 联合训练，EMA 目标编码器保持冻结 | 使用 Policy checkpoint 内保存的联合训练 AE |
 
 RoboTwin 动作为 14 维：左臂 6 维、左夹爪、右臂 6 维、右夹爪。
 Franka 动作为 8 维：7 个关节及夹爪。raw 保留 X-VLA 的关节 MSE 和夹爪 BCE 损失，
-夹爪训练标签须在 `[0, 1]` 内。两种 latent 模式均使用 AE 的动作均值和标准差归一化。
+夹爪训练标签须在 `[0, 1]` 内。latent 模式使用 AE 的动作均值和标准差归一化。
 
 ## 安装环境
 
@@ -69,7 +68,7 @@ paths:
 | AE/latent 的 `task_emb` | 必填，`[384]` 或 `[1, 384]` | 按 AE 配置从任务提示词生成 |
 
 AE 训练不读取图像，raw 训练不读取 `task_emb`。AE 将 `episode_0` 留作验证集。
-Franka 的 AE 和联合训练要求每条 episode 至少包含两个完整动作块，默认是 64 步。
+Franka 的 AE 训练要求每条 episode 至少包含两个完整动作块，默认是 64 步。
 Policy 配置中设置 `data.task_names=null` 可以自动发现所有任务目录，也适用于 RoboTwin
 50 任务数据。AE 的任务列表单独通过 `task_name` 设置。AE 与 Policy 的任务名和语言嵌入
 必须保持一致。
@@ -115,19 +114,16 @@ Policy 通过 `action_ae.step` 选择权重步数，默认 `160000`，并自动�
 ```bash
 bash scripts/train_policy.sh robotwin raw 0
 bash scripts/train_policy.sh robotwin latent 0
-bash scripts/train_policy.sh robotwin latent_joint 0
 bash scripts/train_policy.sh franka raw 0
 bash scripts/train_policy.sh franka latent 0
-bash scripts/train_policy.sh franka latent_joint 0
 bash scripts/train_policy.sh robotwin latent 0,1 action_ae.step=160000 training.batch_size=16
 ```
 
 `training.batch_size` 是每张 GPU 的 batch size。`MAIN_PROCESS_PORT` 设置分布式端口；
 `MIXED_PRECISION=bf16` 开启 Policy 混合精度，AE 运算仍保持 fp32。
 `training.freeze_steps` 控制 VLA 骨干训练初期的学习率冻结，不控制 AE：
-`latent` 全程冻结 AE，`latent_joint` 全程允许 AE 更新。
+`latent` 全程冻结 AE。
 `latent.decoded_loss_coef=0` 可关闭解码动作训练损失。
-联合训练 AE 的学习率与辅助损失权重位于 `joint_ae`。
 
 ```bash
 python train.py --config configs/policy/franka.yaml --mode latent --print_config
@@ -146,7 +142,7 @@ python serve.py --checkpoint results/robotwin_policy/latent/ckpt-50000 --port 80
 python -m evaluation.robotwin --task adjust_bottle --episodes 50 --save_video
 ```
 
-服务端从 checkpoint 自动识别 raw、latent 或联合训练模式。不传 `--checkpoint` 时使用
+服务端从 checkpoint 自动识别 raw 或 latent 模式。不传 `--checkpoint` 时使用
 `paths.policy_checkpoint`。`--steps` 设置 VLA 去噪步数，`--execute_steps` 设置每次重新
 规划前执行的动作数量，默认执行完整动作块。
 在 RoboTwin 仿真环境中从本项目目录启动评估命令；它从 `paths.robotwin` 加载仿真器，

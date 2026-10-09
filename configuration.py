@@ -58,8 +58,8 @@ def policy_config(path, mode, overrides=()):
     )
     if cfg.dataset not in {"robotwin", "franka"}:
         raise ValueError("dataset must be robotwin or franka")
-    if cfg.mode not in {"raw", "latent", "latent_joint"}:
-        raise ValueError("mode must be raw, latent or latent_joint")
+    if cfg.mode not in {"raw", "latent"}:
+        raise ValueError("mode must be raw or latent")
     OmegaConf.resolve(cfg)
     return cfg
 
@@ -89,8 +89,6 @@ def policy_args(cfg):
             ),
             action_ae_stats=str(ae_dir / "dataset_statistics.json"),
         )
-        if cfg.mode == "latent_joint":
-            values.update(OmegaConf.to_container(cfg.joint_ae, resolve=True))
     for name in (
         "batch_size",
         "iters",

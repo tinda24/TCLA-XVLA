@@ -20,6 +20,8 @@ class PolicyRuntime:
             (checkpoint / "policy.json").read_text(encoding="utf-8")
         )
         self.mode = self.metadata["mode"]
+        if self.mode not in {"raw", "latent"}:
+            raise ValueError("Policy checkpoint mode must be raw or latent")
         self.action_dim = int(self.metadata["action_dim"])
         self.device = (
             torch.device("cuda" if torch.cuda.is_available() else "cpu")
