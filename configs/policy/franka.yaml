@@ -1,0 +1,15 @@
+dataset: franka
+output_dir: ${paths.output.franka_policy}/${mode}
+action_ae:
+  run_dir: ${paths.action_ae.franka}
+data:
+  data_root: ${paths.data.franka}
+  task_names:
+    - 260830_bowl_separate
+    - 260830_bowl_stack
+    - 260830_button
+    - 260830_light
+    - 260830_screw
+  camera_names: [front_cam, wrist_cam]
+  num_episodes: 32
+  domain_id: 19

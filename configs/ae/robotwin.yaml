@@ -1,0 +1,81 @@
+run_name: Robotwin_ae_version3_bins48
+run_root_dir: ${paths.output.robotwin_ae}
+seed: 0
+accelerator:
+  mixed_precision: 'no'
+  gradient_accumulation_steps: 1
+task_name:
+- adjust_bottle
+- dump_bin_bigbin
+- grab_roller
+- lift_pot
+- move_playingcard_away
+- open_laptop
+- place_burger_fries
+- place_container_plate
+- press_stapler
+- shake_bottle_horizontally
+n_obs_steps: 1
+n_action_steps: 32
+num_freqs: 48
+is_relative_action: false
+qpos_dim_for_relative_action: 14
+qpos_key: qpos
+datasets:
+  action_data:
+    dataset_py: robotwin_ae_w_freqnorm
+    per_device_batch_size: 256
+    num_workers: 0
+    dataset:
+      path: ${paths.data.robotwin}
+      task_name: ${task_name}
+      n_obs_steps: ${n_obs_steps}
+      n_action_steps: ${n_action_steps}
+      num_episodes: 50
+      val_episode_index: 0
+      seed: ${seed}
+      num_freqs: ${num_freqs}
+      fft_type: dct
+framework:
+  name: ActionAutoencoder_version3
+  encoder_type: tf_seq_cnn
+  decoder_type: tf_attn_w_nonScalarPhase
+  dynamics_model_type: direct_flow_w_nonScalarPhase
+  progress_model_type: perceiver
+  fft_type: dct
+  is_relative_action: ${is_relative_action}
+  qpos_dim_for_relative_action: ${qpos_dim_for_relative_action}
+  qpos_key: ${qpos_key}
+  action_dim: 14
+  chunk_size: ${n_action_steps}
+  latent_action_dim: 16
+  downsample_rate: 4
+  lang_len: 1
+  lang_dim: 384
+  num_freqs: ${num_freqs}
+  action_key: action
+  lang_key: task_emb
+  recon_loss_coef: 1.0
+  dynamics_loss_coef: 1.0
+  use_ema_target_encoder: true
+  ema_momentum_start: 0.996
+  ema_momentum_end: 1.0
+trainer:
+  learning_rate:
+    base: 1e-4
+  optimizer:
+    weight_decay: 1e-4
+    betas:
+    - 0.9
+    - 0.95
+    eps: 1e-8
+  is_resume: false
+  resume_checkpoint: null
+  max_train_steps: 160100
+  log_every_steps: 100
+  save_every_steps: 20000
+  train_mode_eval_every_steps: 5000
+  eval_plot_dpi: 150
+  eval_batch_size: 256
+  eval_tsne_perplexity: 30.0
+  eval_loss_max_windows: null

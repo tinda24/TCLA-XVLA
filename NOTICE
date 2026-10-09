@@ -1,0 +1,17 @@
+XVLA-TCLA
+
+This project is derived from X-VLA:
+https://github.com/2toinf/X-VLA
+Copyright 2025 2toINF (https://github.com/2toINF)
+
+The X-VLA code is distributed under the Apache License, Version 2.0.
+The original license and source copyright notices are retained.
+
+The Florence-2 model and configuration code retain the notices of:
+Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
+
+XVLA-TCLA modifications include TCLA action autoencoder v3 integration,
+RoboTwin and Franka training and inference, local path configuration,
+and removal of unrelated platform and experiment code.
+
+XVLA-TCLA is a derivative project, not the official X-VLA release.

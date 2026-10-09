@@ -1,0 +1,20 @@
+dataset: robotwin
+output_dir: ${paths.output.robotwin_policy}/${mode}
+action_ae:
+  run_dir: ${paths.action_ae.robotwin}
+data:
+  data_root: ${paths.data.robotwin}
+  task_names:
+    - adjust_bottle
+    - dump_bin_bigbin
+    - grab_roller
+    - lift_pot
+    - move_playingcard_away
+    - open_laptop
+    - place_burger_fries
+    - place_container_plate
+    - press_stapler
+    - shake_bottle_horizontally
+  camera_names: [cam_high, cam_left_wrist, cam_right_wrist]
+  num_episodes: 50
+  domain_id: 6

@@ -1,0 +1,17 @@
+paths:
+  data:
+    robotwin: data/robotwin
+    franka: data/franka
+  output:
+    robotwin_ae: results/robotwin_ae
+    franka_ae: results/franka_ae
+    robotwin_policy: results/robotwin_policy
+    franka_policy: results/franka_policy
+  action_ae:
+    robotwin: results/robotwin_ae/selected_run
+    franka: results/franka_ae/selected_run
+  pretrained_model: 2toINF/X-VLA-Pt
+  language_model: sentence-transformers/all-MiniLM-L6-v2
+  policy_checkpoint: results/robotwin_policy/raw/ckpt-50000
+  robotwin: external/RoboTwin
+  eval_output: results/evaluation

@@ -1,0 +1,29 @@
+models: ${paths.pretrained_model}
+training:
+  batch_size: 16
+  num_workers: 4
+  learning_rate: 1e-4
+  learning_coef: 0.1
+  weight_decay: 0.0
+  betas: [0.9, 0.95]
+  max_grad_norm: 1.0
+  iters: 50000
+  freeze_steps: 1000
+  warmup_steps: 2000
+  use_cosine_decay: false
+  min_lr_ratio: 0.1
+  save_interval: 10000
+  log_interval: 20
+  seed: 0
+raw:
+  chunk_size: 32
+action_ae:
+  step: 160000
+latent:
+  latent_loss_coef: 1.0
+  decoded_loss_coef: 0.1
+joint_ae:
+  action_ae_learning_rate: 1e-5
+  action_ae_reconstruction_coef: 1.0
+  action_ae_progress_coef: 1.0
+  action_ae_dynamics_coef: 1.0
