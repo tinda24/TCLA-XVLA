@@ -2,8 +2,8 @@
 
 [English](README.md)
 
-XVLA-TCLA 将 TCLA v3 动作自编码器集成到 [X-VLA](https://github.com/2toinf/X-VLA)，
-支持 RoboTwin 2.0 和 Franka 的训练与推理。本项目是衍生项目，并非 X-VLA 官方版本。
+XVLA-TCLA 将 TCLA 动作自编码器集成到 [X-VLA](https://github.com/2toinf/X-VLA)，
+支持 RoboTwin 和 Franka 的训练与推理。本项目是基于 X-VLA 的独立衍生项目。
 视觉语言骨干和软提示策略 Transformer 来自 X-VLA；TCLA 增加了动作压缩、轨迹条件解码，
 以及可在本项目内独立运行的 AE 训练流程。
 
@@ -76,7 +76,7 @@ Policy 配置中设置 `data.task_names=null` 可以自动发现所有任务目�
 ## 独立训练 Autoencoder
 
 AE 配置位于 [RoboTwin](configs/ae/robotwin.yaml) 和 [Franka](configs/ae/franka.yaml)，
-来自 TCLA 的 `train_version3.sh` 配置。默认使用 32 步动作块、48 个 DCT 频率分量、
+采用 TCLA 的自编码器训练配置。默认使用 32 步动作块、48 个 DCT 频率分量、
 8 个 16 维潜变量 token、EMA 目标编码器、语言条件 Perceiver 进度模型及恒定学习率。
 
 ```bash

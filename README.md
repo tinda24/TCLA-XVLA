@@ -2,9 +2,9 @@
 
 [中文](README_CN.md)
 
-XVLA-TCLA integrates the TCLA v3 action autoencoder with
-[X-VLA](https://github.com/2toinf/X-VLA) for RoboTwin 2.0 and Franka.
-This is a derivative project, not the official X-VLA release. The vision-language
+XVLA-TCLA integrates the TCLA action autoencoder with
+[X-VLA](https://github.com/2toinf/X-VLA) for RoboTwin and Franka.
+This project is an independent derivative of X-VLA. The vision-language
 backbone and soft-prompted policy transformer come from X-VLA. TCLA adds action
 compression, trajectory-conditioned decoding, and independent AE training.
 
@@ -81,7 +81,7 @@ Keep task names and language embeddings consistent across AE and policy training
 ## Train the Autoencoder
 
 The local AE configs are [RoboTwin](configs/ae/robotwin.yaml) and
-[Franka](configs/ae/franka.yaml), ported from TCLA's `train_version3.sh` setup.
+[Franka](configs/ae/franka.yaml), adapted from TCLA's autoencoder training configuration.
 Defaults: 32 action steps, 48 DCT bins, 8 latent tokens of width 16, EMA target
 encoder, language-conditioned Perceiver progress model, and constant learning rate.
 
