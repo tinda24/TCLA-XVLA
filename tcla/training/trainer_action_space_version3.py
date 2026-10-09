@@ -36,9 +36,7 @@ class ActionSpaceTrainer(TrainerUtils):
                 dataset=dataset,
                 run_dir=self.run_dir,
                 device=accelerator.device,
-                dpi=int(cfg.trainer.get("eval_plot_dpi", 150)),
                 batch_size=int(cfg.trainer.get("eval_batch_size", 256)),
-                tsne_perplexity=float(cfg.trainer.get("eval_tsne_perplexity", 30.0)),
                 eval_loss_max_windows=cfg.trainer.get("eval_loss_max_windows", None),
             )
         self.print_module_parameters(accelerator.unwrap_model(model))

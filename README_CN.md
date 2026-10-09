@@ -92,7 +92,7 @@ Franka 默认使用 MiniLM。显式设置 `datasets.action_data.dataset.task_emb
 可训练 hash 条件 AE；使用已经训练好的 checkpoint 时，不要更换语言嵌入来源。
 
 带时间戳的 AE 运行目录会保存 `config.yaml`、`dataset_statistics.json`、
-`checkpoints/steps_<step>_pytorch_model.pt`、验证 CSV 和潜空间可视化。
+`checkpoints/steps_<step>_pytorch_model.pt` 和验证 CSV。
 AE checkpoint 包含优化器及学习率调度器状态，恢复训练示例：
 
 ```bash

@@ -36,25 +36,19 @@ class ActionAETrainingEvaluatorVersion3:
         dataset,
         run_dir: Path,
         device: torch.device,
-        dpi: int = 150,
         batch_size: int = 256,
-        tsne_perplexity: float = 30.0,
         eval_loss_max_windows: Optional[int] = 128,
     ):
         self.cfg = cfg
         self.dataset = dataset
         self.run_dir = Path(run_dir)
         self.device = device
-        self.dpi = int(dpi)
         self.batch_size = int(batch_size)
-        self.tsne_perplexity = float(tsne_perplexity)
         self.eval_loss_max_windows = eval_loss_max_windows
         self.stats = dict(getattr(dataset, "stats", {}))
         self.chunk_size = int(cfg.framework.chunk_size)
         self.num_freqs = int(cfg.framework.num_freqs)
         self.lang_dim = int(cfg.framework.lang_dim)
-        self.action_key = str(cfg.framework.action_key)
-        self.lang_key = str(cfg.framework.lang_key)
         self.fft_type = str(getattr(cfg.framework, "fft_type", "dct"))
 
     def _encode_prefix_freq(self, normalized_prefix: np.ndarray) -> np.ndarray:
@@ -233,40 +227,3 @@ class ActionAETrainingEvaluatorVersion3:
 
         if loss_rows:
             self._append_eval_loss_csv(step, loss_rows)
-
-        self._run_val_tsne(model, step)
-
-    @torch.no_grad()
-    def _run_val_tsne(self, model, step: int):
-        import matplotlib.pyplot as plt
-        from sklearn.manifold import TSNE
-
-        out_dir = self.run_dir / "latent_tsne_eval" / f"steps_{step}"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        for task_name, episode in self.dataset.val_episode_by_task.items():
-            windows = self._episode_windows(episode)
-            if len(windows) < 3:
-                continue
-            latents = []
-            for start in range(0, len(windows), self.batch_size):
-                data = model.prepare_data(windows[start : start + self.batch_size])
-                latent = model.encoder(data[self.action_key], data[self.lang_key])
-                latents.append(latent.flatten(1).float().cpu().numpy())
-            latents = np.concatenate(latents)
-            coords = TSNE(
-                n_components=2,
-                perplexity=min(self.tsne_perplexity, len(latents) - 1),
-                random_state=0,
-                init="pca",
-                learning_rate="auto",
-            ).fit_transform(latents)
-            fig, ax = plt.subplots(figsize=(6, 5))
-            ax.plot(coords[:, 0], coords[:, 1], color="0.7", linewidth=0.5)
-            points = ax.scatter(
-                coords[:, 0], coords[:, 1], c=np.linspace(0, 1, len(coords)), s=12
-            )
-            fig.colorbar(points, ax=ax, label="Episode progress")
-            ax.set_title(task_name)
-            fig.tight_layout()
-            fig.savefig(out_dir / f"{task_name}_val_episode_0_tsne.png", dpi=self.dpi)
-            plt.close(fig)

@@ -4,10 +4,6 @@ import random
 import time
 from pathlib import Path
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from omegaconf import OmegaConf
@@ -202,46 +198,6 @@ class ActionSpaceTrainerUtils:
             return
         items = " | ".join(f"{key}: {value:.6f}" for key, value in metrics.items())
         self.accelerator.print(f"step: {step} | {items} | csv: {self.metrics_csv_path}")
-        self.plot_metrics()
-
-    def plot_metrics(self):
-        records = self._read_metrics_jsonl()
-        if not records:
-            return
-        if len(records) < 2:
-            return
-
-        imgs_dir = self.run_dir / "imgs"
-        imgs_dir.mkdir(parents=True, exist_ok=True)
-        steps = [record["step"] for record in records]
-
-        self._plot_metric_group(
-            imgs_dir / "loss_curve.png",
-            steps,
-            records,
-            ["total_loss", "pred_loss", "recon_loss"],
-            "Training Loss",
-            "Loss",
-        )
-
-    @staticmethod
-    def _plot_metric_group(path, steps, records, keys, title, ylabel, log_scale=False):
-        plt.figure(figsize=(10, 6))
-        for key in keys:
-            values = [record[key] for record in records if key in record]
-            if len(values) != len(steps):
-                continue
-            plt.plot(steps, values, label=key)
-        plt.title(title)
-        plt.xlabel("Step")
-        plt.ylabel(ylabel)
-        plt.grid(True, linestyle="--", alpha=0.5)
-        plt.legend()
-        if log_scale:
-            plt.yscale("log")
-        plt.tight_layout()
-        plt.savefig(path, dpi=150)
-        plt.close()
 
     def write_summary(self, step):
         if not self.accelerator.is_main_process:

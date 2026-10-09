@@ -100,7 +100,7 @@ with `datasets.action_data.dataset.task_emb_source=hash`; do not change the
 embedding source when using an already trained checkpoint.
 
 Each timestamped AE run saves `config.yaml`, `dataset_statistics.json`,
-`checkpoints/steps_<step>_pytorch_model.pt`, validation CSVs and latent plots.
+`checkpoints/steps_<step>_pytorch_model.pt` and validation CSVs.
 Checkpoints include optimizer/scheduler state. To resume:
 
 ```bash

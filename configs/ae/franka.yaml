@@ -74,7 +74,5 @@ trainer:
   log_every_steps: 100
   save_every_steps: 20000
   train_mode_eval_every_steps: 5000
-  eval_plot_dpi: 150
   eval_batch_size: 256
-  eval_tsne_perplexity: 30.0
   eval_loss_max_windows: null
