@@ -184,6 +184,54 @@ checkpoint's camera order, and returns `{"action": [...]}`. Known task embedding
 are bundled when consistent across episodes; unseen tasks or episode-specific
 RoboTwin embeddings require the matching `task_emb` in `/reset`.
 
+## Raw Differences from Upstream X-VLA
+
+This section compares RoboTwin `raw` training and inference with
+[X-VLA](https://github.com/2toinf/X-VLA) RoboTwin2. The reference is the
+fine-tuning command in that README, `train.py`, `RobotWin2Handler` in
+`datasets/domain_handler/simulations.py`, and
+`evaluation/robotwin-2.0/client.py`. `X-VLA-Pt` is configured with
+`action_mode=ee6d` and `num_actions=30`.
+
+These settings match the upstream README fine-tuning example: batch size 16 per
+GPU, learning rate `1e-4`, `learning_coef=0.1`, 50000 iterations, 1000 freeze
+steps, 2000 warmup steps, AdamW betas `(0.9, 0.95)`, zero weight decay, gradient
+clip 1.0, and no cosine decay. The domain id is 6. The three cameras are head,
+left wrist, and right wrist. Image augmentation is a 224 bicubic resize,
+brightness/contrast/saturation jitter of 0.2, and ImageNet normalization.
+Denoising uses 10 steps by default. Evaluation uses `demo_clean`, and seeds
+start at `2000 * (seed + 1)`. The `train.py` argparse defaults are
+`learning_coef=1.0` and `iters=1000000`; this repository follows the README
+example.
+
+### Training
+
+| Item | Upstream X-VLA | This repository, raw |
+| --- | --- | --- |
+| Action | Absolute end-effector pose, 20D: xyz(3) + rot6d(6) + gripper(1) per arm | Absolute joints, 14D: 6 joints + gripper per arm |
+| Action head | Continues the pretrained ee6d head | Reinitializes the joint head after the dimension and horizon change |
+| Time window | `num_actions=30`. Samples up to 1 second at 30 Hz by interpolation; the current frame is proprioception and the next 30 steps are the action | `chunk_size=32`. Takes 32 consecutive rows from the current frame, including that frame's action, and repeats the last frame past the end |
+| Gripper target | Converts the end-effector gripper from open=1 to closed=1 before BCE | Uses dataset joint grippers already in `[0, 1]`, with BCE on channels 6 and 13 |
+| Tasks | RoboTwin2: 50 tasks, 50 demonstrations each | `configs/policy/robotwin.yaml`: 10 tasks, 50 episodes each |
+| Precision | The launch command uses `--mixed_precision bf16` | `scripts/train_policy.sh` defaults to `MIXED_PRECISION=no` |
+| Save interval | `train.py` defaults to 50000 steps | `configs/policy/base.yaml` uses 10000 steps |
+
+Training reads the HDF5 `task_name`, for example `adjust bottle`. That matches
+the upstream evaluator, which replaces underscores in the task name with spaces.
+
+### Inference
+
+| Item | Upstream X-VLA | This repository, raw |
+| --- | --- | --- |
+| Command | Converts the 20D end-effector action to position, quaternion, and gripper, then calls `action_type='ee'` | Sends a 14D joint target with `action_type='qpos'` |
+| Language | `task_name.replace('_', ' ')`, for example `adjust bottle` | `evaluation/robotwin.py` passes only the directory name to `reset`, so the server uses `adjust_bottle` |
+| Replanning | At most 10 policy queries, each executing the full 30-step end-effector chunk | The server caches the chunk and returns one step per `/act`; the default chunk is 32 and evaluation allows 3000 environment steps |
+| Episodes per task | `eval_robotwin.sh` uses 100 | `evaluation/robotwin.py` defaults to 50 |
+| Request fields | `json_numpy` `proprio`, `language_instruction`, `domain_id`, and three images | Standard JSON `qpos` and three images; the domain id comes from the checkpoint |
+
+A raw checkpoint from this repository is a joint-position policy. Its results
+are not directly comparable with `2toINF/X-VLA-RoboTwin2`.
+
 ## Attribution and Citation
 
 Credit for the original X-VLA architecture and pretrained models belongs to

@@ -171,6 +171,49 @@ HTTP 接口包括 `GET /info`、`POST /reset` 和 `POST /act`。
 同一任务各 episode 的嵌入一致时，会保存到 checkpoint；未见过的 RoboTwin 任务或逐 episode
 变化的嵌入，需要在 `/reset` 中传入匹配的 `task_emb`。
 
+## 与上游 X-VLA Raw 的差异
+
+本节只比较 RoboTwin `raw` 与 [X-VLA](https://github.com/2toinf/X-VLA) 的
+RoboTwin2 微调、推理。对照对象是仓库 README 中的微调命令、`train.py`、
+`datasets/domain_handler/simulations.py` 的 `RobotWin2Handler`，以及
+`evaluation/robotwin-2.0/client.py`。预训练权重 `X-VLA-Pt` 的配置是
+`action_mode=ee6d`、`num_actions=30`。
+
+以下项与上游 README 微调示例一致：每卡 batch 16、学习率 `1e-4`、
+`learning_coef=0.1`、50000 iter、冻结 1000 step、warmup 2000 step、
+AdamW `(0.9, 0.95)`、weight decay 0、梯度裁剪 1.0、关闭 cosine。
+domain id 为 6。三路相机是 head、左腕、右腕。图像增强是 224 双三次缩放、
+亮度/对比度/饱和度 0.2 抖动和 ImageNet 归一化。去噪步数默认 10。
+评测配置名是 `demo_clean`，种子从 `2000 * (seed + 1)` 起。
+`train.py` 源码默认值是 `learning_coef=1.0`、`iters=1000000`，和 README 示例不同；
+本仓库跟随 README 示例。
+
+### 训练
+
+| 项 | 上游 X-VLA | 本仓库 raw |
+| --- | --- | --- |
+| 动作 | 绝对末端位姿，20 维：左右各 xyz(3) + rot6d(6) + gripper(1) | 绝对关节，14 维：左右各 6 关节 + 夹爪 |
+| 动作头 | 继续训练预训练 ee6d 头 | 维度和长度变化后重新初始化关节动作头 |
+| 时间窗 | `num_actions=30`。未来最多 1 秒、按 30 Hz 插值采样；当前帧作本体感觉，其后 30 步作动作 | `chunk_size=32`。从当前帧起连续取 32 行，含当前帧动作；末尾重复最后一帧补齐 |
+| 夹爪标签 | 末端夹爪从“1=张开”转为“1=闭合”后再做 BCE | 数据里关节夹爪已在 `[0, 1]`，通道 6 和 13 做 BCE |
+| 任务规模 | RoboTwin2：50 个任务，每任务 50 条 | `configs/policy/robotwin.yaml`：10 个任务，每任务 50 条 |
+| 精度 | 启动命令使用 `--mixed_precision bf16` | `scripts/train_policy.sh` 默认 `MIXED_PRECISION=no` |
+| 存盘间隔 | `train.py` 默认 50000 step | `configs/policy/base.yaml` 为 10000 step |
+
+训练语言读取 HDF5 的 `task_name`，例如 `adjust bottle`。这与上游评测把任务名下划线换成空格后的字符串相同。
+
+### 推理
+
+| 项 | 上游 X-VLA | 本仓库 raw |
+| --- | --- | --- |
+| 下发指令 | 20 维末端动作转成位置、四元数和夹爪后，`action_type='ee'` | 14 维关节目标，`action_type='qpos'` |
+| 语言 | `task_name.replace('_', ' ')`，例如 `adjust bottle` | `evaluation/robotwin.py` 只把目录名传给 `reset`，服务端使用 `adjust_bottle` |
+| 重规划 | 外层最多查询 10 次，每次执行完整的 30 步末端动作 | 服务端缓存动作块，每次 `/act` 返回一步；默认块长 32，评测最多 3000 个环境步 |
+| 每任务条数 | `eval_robotwin.sh` 为 100 | `evaluation/robotwin.py` 默认 50 |
+| 请求字段 | `json_numpy` 的 `proprio`、`language_instruction`、`domain_id`、三路图像 | 标准 JSON 的 `qpos` 和三路图像；domain id 来自 checkpoint |
+
+因此本仓库 raw checkpoint 是关节位置策略。它和 `2toINF/X-VLA-RoboTwin2` 的末端位姿结果不能直接比较。
+
 ## 致谢、引用与许可
 
 原始 X-VLA 架构和预训练模型的贡献属于 [2toINF 及 X-VLA 作者](https://github.com/2toinf/X-VLA)。
