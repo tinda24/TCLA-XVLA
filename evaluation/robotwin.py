@@ -67,6 +67,32 @@ def qpos_from_obs(obs):
     ).astype(np.float32)
 
 
+ARM_JOINTS = np.array([*range(0, 6), *range(7, 13)])
+
+
+def joint_jerk(trajectory):
+    """Third finite difference of the 12 arm joints, excluding both grippers."""
+    positions = np.asarray(trajectory, dtype=np.float64)
+    if positions.ndim != 2 or positions.shape[1] != 14 or positions.shape[0] < 4:
+        return None
+    jerk = np.diff(positions[:, ARM_JOINTS], n=3, axis=0)
+    step_rms = np.sqrt(np.mean(np.square(jerk), axis=1))
+    return {
+        "unit": "rad/step^3",
+        "num_samples": int(positions.shape[0]),
+        "num_jerk_samples": int(jerk.shape[0]),
+        "rms": float(np.sqrt(np.mean(np.square(jerk)))),
+        "mean_jerk": float(np.mean(step_rms)),
+    }
+
+
+def mean_jerk(rows):
+    values = [row["mean_jerk"] for row in rows if row.get("mean_jerk") is not None]
+    if not values:
+        return None
+    return float(np.mean(values))
+
+
 def evaluate_task(
     client, task, task_config, episodes, seed, max_steps, output, save_video
 ):
@@ -81,6 +107,8 @@ def evaluate_task(
         "cam_right_wrist": "right_camera",
     }
     output.mkdir(parents=True, exist_ok=True)
+    episodes_path = output / "episodes.jsonl"
+    episodes_path.write_text("", encoding="utf-8")
     while completed < episodes:
         attempts += 1
         if attempts > episodes * 100:
@@ -102,6 +130,7 @@ def evaluate_task(
             continue
         success = False
         frames = []
+        trajectory = []
         try:
             env.setup_demo(
                 now_ep_num=completed, seed=selected_seed, is_test=True, **args
@@ -110,16 +139,19 @@ def evaluate_task(
             client.reset(task)
             for _ in range(max_steps):
                 obs = env.get_obs()
+                qpos = qpos_from_obs(obs)
+                trajectory.append(qpos)
                 images = [
                     obs["observation"][camera_map[name]]["rgb"]
                     for name in client.metadata["camera_names"]
                 ]
-                action = client.act(qpos_from_obs(obs), images)
+                action = client.act(qpos, images)
                 env.take_action(action, action_type="qpos")
                 if save_video:
                     frames.append(env.get_obs()["observation"]["head_camera"]["rgb"])
                 if env.check_success():
                     success = True
+                    trajectory.append(qpos_from_obs(env.get_obs()))
                     break
                 if not env.actor_pose:
                     break
@@ -128,24 +160,33 @@ def evaluate_task(
         completed += 1
         env.suc += int(success)
         env.test_num = completed
+        jerk = joint_jerk(trajectory)
         result = {
             "task": task,
             "episode": completed,
             "seed": selected_seed,
             "success": success,
+            "num_steps": len(trajectory),
+            "mean_jerk": None if jerk is None else jerk["mean_jerk"],
+            "jerk_rms": None if jerk is None else jerk["rms"],
         }
-        with (output / "episodes.jsonl").open("a", encoding="utf-8") as file:
+        with episodes_path.open("a", encoding="utf-8") as file:
             file.write(json.dumps(result) + "\n")
         if frames:
             import imageio.v2 as imageio
 
             imageio.mimsave(output / f"{completed}_{int(success)}.mp4", frames, fps=30)
         print(f"{task}: {env.suc}/{completed}")
+    episode_rows = []
+    with episodes_path.open(encoding="utf-8") as file:
+        episode_rows = [json.loads(line) for line in file if line.strip()]
     result = {
         "task": task,
         "episodes": completed,
         "successes": env.suc,
         "success_rate": env.suc / completed,
+        "mean_jerk": mean_jerk(episode_rows),
+        "jerk_unit": "rad/step^3",
     }
     (output / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result
@@ -179,20 +220,38 @@ def main():
     sys.path.insert(0, str(root))
     os.chdir(root)
     tasks = client.metadata["task_names"] if args.task == "all" else [args.task]
+    task_results = []
     try:
         for task in tasks:
-            evaluate_task(
-                client,
-                task,
-                args.task_config,
-                args.episodes,
-                args.seed,
-                args.max_steps,
-                output / task,
-                args.save_video,
+            task_results.append(
+                evaluate_task(
+                    client,
+                    task,
+                    args.task_config,
+                    args.episodes,
+                    args.seed,
+                    args.max_steps,
+                    output / task,
+                    args.save_video,
+                )
             )
     finally:
         client.close()
+        if task_results:
+            successes = sum(item["successes"] for item in task_results)
+            episodes = sum(item["episodes"] for item in task_results)
+            summary = {
+                "tasks": task_results,
+                "episodes": episodes,
+                "successes": successes,
+                "success_rate": successes / episodes if episodes else None,
+                "mean_jerk": mean_jerk(task_results),
+                "jerk_unit": "rad/step^3",
+            }
+            output.mkdir(parents=True, exist_ok=True)
+            (output / "summary.json").write_text(
+                json.dumps(summary, indent=2), encoding="utf-8"
+            )
 
 
 if __name__ == "__main__":

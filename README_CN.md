@@ -182,7 +182,7 @@ RoboTwin2 微调、推理。对照对象是仓库 README 中的微调命令、`t
 以下项与上游 README 微调示例一致：每卡 batch 16、学习率 `1e-4`、
 `learning_coef=0.1`、50000 iter、冻结 1000 step、warmup 2000 step、
 AdamW `(0.9, 0.95)`、weight decay 0、梯度裁剪 1.0、关闭 cosine。
-domain id 为 6。三路相机是 head、左腕、右腕。图像增强是 224 双三次缩放、
+domain id 对齐。上游 `robotwin2_abs_ee` 和 `robotwin2_clean` 共用 `RobotWin2Handler`，在 `datasets/domain_config.py` 里都映射为 6；域名只选择数据列表，模型使用的是这个整数。它从 `X-VLA-Pt` 的 30 行 soft prompt 中取出第 6 行，并选择动作编码器、动作解码器里 `DomainAwareLinear` 的第 6 组权重。本仓库没有域名表，`configs/policy/robotwin.yaml` 直接写 `domain_id: 6`，raw 和 latent 都用这一行。三路相机是 head、左腕、右腕。图像增强是 224 双三次缩放、
 亮度/对比度/饱和度 0.2 抖动和 ImageNet 归一化。去噪步数默认 10。
 评测配置名是 `demo_clean`，种子从 `2000 * (seed + 1)` 起。
 `train.py` 源码默认值是 `learning_coef=1.0`、`iters=1000000`，和 README 示例不同；
@@ -193,7 +193,7 @@ domain id 为 6。三路相机是 head、左腕、右腕。图像增强是 224 �
 | 项 | 上游 X-VLA | 本仓库 raw |
 | --- | --- | --- |
 | 动作 | 绝对末端位姿，20 维：左右各 xyz(3) + rot6d(6) + gripper(1) | 绝对关节，14 维：左右各 6 关节 + 夹爪 |
-| 动作头 | 继续训练预训练 ee6d 头 | 维度和长度变化后重新初始化关节动作头 |
+| 动作头 | 继续训练预训练的 20 维 ee6d 头 | raw 和 latent 都在加载后重新初始化动作头，见下表 |
 | 时间窗 | `num_actions=30`。未来最多 1 秒、按 30 Hz 插值采样；当前帧作本体感觉，其后 30 步作动作 | `chunk_size=32`。从当前帧起连续取 32 行，含当前帧动作；末尾重复最后一帧补齐 |
 | 夹爪标签 | 末端夹爪从“1=张开”转为“1=闭合”后再做 BCE | 数据里关节夹爪已在 `[0, 1]`，通道 6 和 13 做 BCE |
 | 任务规模 | RoboTwin2：50 个任务，每任务 50 条 | `configs/policy/robotwin.yaml`：10 个任务，每任务 50 条 |
@@ -201,6 +201,17 @@ domain id 为 6。三路相机是 head、左腕、右腕。图像增强是 224 �
 | 存盘间隔 | `train.py` 默认 50000 step | `configs/policy/base.yaml` 为 10000 step |
 
 训练语言读取 HDF5 的 `task_name`，例如 `adjust bottle`。这与上游评测把任务名下划线换成空格后的字符串相同。
+
+`X-VLA-Pt` 的动作头是 20 维 ee6d：`action_encoder` 和 `action_decoder` 都是 `DomainAwareLinear`。本仓库两种模式都用 `ignore_mismatched_sizes=True` 加载，因为输入输出维度变了，然后用同一套初始化盖掉这两层：`fc.weight` 为 Xavier uniform，`bias.weight` 为 0。这么做是为了公平：raw 和 latent 都不继承预训练 ee6d 动作头，比较时起点相同。参数只计这两个 `DomainAwareLinear`。分母是对应配置下的整个 XVLA，包括 Florence 编码器、Transformer 和 soft prompt，不含已删除的语言 decoder 与 `lm_head`。预训练 20 维头是 2,857,560 / 879,738,545（0.325%）。换头之后，RoboTwin raw 为 2,304,420 / 879,185,405（0.262%），Franka raw 为 1,751,280 / 878,632,265（0.199%），latent 为 2,488,800 / 879,369,785（0.283%）。VLM 和 soft prompt 仍沿用预训练权重。损失函数模块本身没有预训练参数。
+
+| | raw | latent |
+| --- | --- | --- |
+| 函数 | `train_raw.py` 的 `reinit_joint_action_head` | `train_latent.py` 的 `reinit_latent_action_head` |
+| `action_mode` | RoboTwin `joint`，Franka `joint8` | `auto` |
+| 动作维度 | RoboTwin 14，Franka 8 | AE 的 `latent_action_dim`，默认 16 |
+| token 数 | `chunk_size=32` | `chunk_size / downsample_rate`，默认 8 |
+| 预测对象 | 物理关节和夹爪 | AE 潜变量；可选再解码成物理动作 |
+| 动作头参数 | RoboTwin 2,304,420，占该配置总参数 879,185,405 的 0.262%；Franka 1,751,280，占 878,632,265 的 0.199% | 2,488,800，占该配置总参数 879,369,785 的 0.283% |
 
 ### 推理
 

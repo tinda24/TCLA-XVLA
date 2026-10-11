@@ -196,7 +196,7 @@ fine-tuning command in that README, `train.py`, `RobotWin2Handler` in
 These settings match the upstream README fine-tuning example: batch size 16 per
 GPU, learning rate `1e-4`, `learning_coef=0.1`, 50000 iterations, 1000 freeze
 steps, 2000 warmup steps, AdamW betas `(0.9, 0.95)`, zero weight decay, gradient
-clip 1.0, and no cosine decay. The domain id is 6. The three cameras are head,
+clip 1.0, and no cosine decay. The domain id matches. Upstream `robotwin2_abs_ee` and `robotwin2_clean` share `RobotWin2Handler` and both map to 6 in `datasets/domain_config.py`; the name only selects the data list, and the model consumes the integer. That integer picks row 6 of the 30 soft-prompt rows in `X-VLA-Pt`, and the matching `DomainAwareLinear` weights in the action encoder and decoder. This repository has no domain-name table. `configs/policy/robotwin.yaml` sets `domain_id: 6` directly, and both raw and latent training use that row. The three cameras are head,
 left wrist, and right wrist. Image augmentation is a 224 bicubic resize,
 brightness/contrast/saturation jitter of 0.2, and ImageNet normalization.
 Denoising uses 10 steps by default. Evaluation uses `demo_clean`, and seeds
@@ -209,7 +209,7 @@ example.
 | Item | Upstream X-VLA | This repository, raw |
 | --- | --- | --- |
 | Action | Absolute end-effector pose, 20D: xyz(3) + rot6d(6) + gripper(1) per arm | Absolute joints, 14D: 6 joints + gripper per arm |
-| Action head | Continues the pretrained ee6d head | Reinitializes the joint head after the dimension and horizon change |
+| Action head | Continues the pretrained 20D ee6d head | Both raw and latent reinitialize the action head after loading; see the table below |
 | Time window | `num_actions=30`. Samples up to 1 second at 30 Hz by interpolation; the current frame is proprioception and the next 30 steps are the action | `chunk_size=32`. Takes 32 consecutive rows from the current frame, including that frame's action, and repeats the last frame past the end |
 | Gripper target | Converts the end-effector gripper from open=1 to closed=1 before BCE | Uses dataset joint grippers already in `[0, 1]`, with BCE on channels 6 and 13 |
 | Tasks | RoboTwin2: 50 tasks, 50 demonstrations each | `configs/policy/robotwin.yaml`: 10 tasks, 50 episodes each |
@@ -218,6 +218,31 @@ example.
 
 Training reads the HDF5 `task_name`, for example `adjust bottle`. That matches
 the upstream evaluator, which replaces underscores in the task name with spaces.
+
+`X-VLA-Pt` uses a 20D ee6d action head: both `action_encoder` and
+`action_decoder` are `DomainAwareLinear`. This repository loads that checkpoint
+with `ignore_mismatched_sizes=True` because those dimensions change, then
+overwrites the two layers with the same initialization: Xavier uniform
+`fc.weight` and zero `bias.weight`. Both modes do this so the comparison is
+fair: neither raw nor latent inherits the pretrained ee6d action head, and they
+start from the same initialization. The count includes only these two
+`DomainAwareLinear` modules. The denominator is the full XVLA for that
+configuration, including the Florence encoder, Transformer, and soft prompts,
+excluding the deleted language decoder and `lm_head`. The pretrained 20D head
+is 2,857,560 / 879,738,545 (0.325%). After replacement, RoboTwin raw is
+2,304,420 / 879,185,405 (0.262%), Franka raw is 1,751,280 / 878,632,265
+(0.199%), and latent is 2,488,800 / 879,369,785 (0.283%). The VLM and soft
+prompts keep the pretrained weights. The loss modules have no pretrained
+parameters.
+
+| | raw | latent |
+| --- | --- | --- |
+| Function | `reinit_joint_action_head` in `train_raw.py` | `reinit_latent_action_head` in `train_latent.py` |
+| `action_mode` | `joint` for RoboTwin, `joint8` for Franka | `auto` |
+| Action width | 14 for RoboTwin, 8 for Franka | AE `latent_action_dim`, 16 by default |
+| Token count | `chunk_size=32` | `chunk_size / downsample_rate`, 8 by default |
+| Prediction | Physical joints and gripper | AE latent tokens, optionally decoded to physical actions |
+| Action-head parameters | RoboTwin 2,304,420, 0.262% of 879,185,405; Franka 1,751,280, 0.199% of 878,632,265 | 2,488,800, 0.283% of 879,369,785 |
 
 ### Inference
 
