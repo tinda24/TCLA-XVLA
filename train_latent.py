@@ -261,6 +261,7 @@ def main(args):
                 train_dataset,
                 global_step,
                 action_ae,
+                world_size=accelerator.num_processes,
             )
         if global_step >= args.iters:
             break

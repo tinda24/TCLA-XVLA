@@ -123,8 +123,13 @@ def main():
         else None
     )
     resume_dir = str(Path(resume_checkpoint).parents[1]) if resume_checkpoint else None
+    per_device = int(cfg.datasets.action_data.per_device_batch_size)
+    run_name = (
+        f"{cfg.run_name}_bs{per_device}x{accelerator.num_processes}"
+        f"_bins{int(cfg.framework.num_freqs)}"
+    )
     run_dir = make_run_dir(
-        cfg.run_root_dir, cfg.run_name, accelerator, resume_dir=resume_dir
+        cfg.run_root_dir, run_name, accelerator, resume_dir=resume_dir
     )
     if accelerator.is_main_process:
         accelerator.print(f"workspace: {run_dir}")

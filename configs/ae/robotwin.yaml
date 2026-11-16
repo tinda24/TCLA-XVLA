@@ -1,4 +1,4 @@
-run_name: Robotwin_ae_version3_bins48
+run_name: Robotwin_ae_version3
 run_root_dir: ${paths.output.robotwin_ae}
 seed: 0
 accelerator:
@@ -17,7 +17,7 @@ task_name:
 - shake_bottle_horizontally
 n_obs_steps: 1
 n_action_steps: 32
-num_freqs: 48
+num_freqs: 24
 is_relative_action: false
 qpos_dim_for_relative_action: 14
 qpos_key: qpos

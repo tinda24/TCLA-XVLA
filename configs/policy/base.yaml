@@ -1,6 +1,6 @@
 models: ${paths.pretrained_model}
 training:
-  batch_size: 16
+  batch_size: 8
   num_workers: 4
   learning_rate: 1e-4
   learning_coef: 0.1

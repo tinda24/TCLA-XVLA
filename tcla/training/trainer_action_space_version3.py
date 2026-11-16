@@ -111,7 +111,14 @@ class ActionSpaceTrainer(TrainerUtils):
     def save_checkpoint(self, step):
         if not self.accelerator.is_main_process:
             return
-        path = self.run_dir / "checkpoints" / f"steps_{step}_pytorch_model.pt"
+        per_device = int(self.cfg.datasets.action_data.per_device_batch_size)
+        world_size = int(self.accelerator.num_processes)
+        num_freqs = int(self.cfg.framework.num_freqs)
+        path = (
+            self.run_dir
+            / "checkpoints"
+            / f"steps_{step}_bs{per_device}x{world_size}_bins{num_freqs}_pytorch_model.pt"
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         self.accelerator.save(
             {
@@ -119,6 +126,10 @@ class ActionSpaceTrainer(TrainerUtils):
                 "model": self.accelerator.unwrap_model(self.model).state_dict(),
                 "optimizer": self.optimizer.state_dict(),
                 "lr_scheduler": self.lr_scheduler.state_dict(),
+                "batch_size": per_device,
+                "world_size": world_size,
+                "global_batch_size": per_device * world_size,
+                "num_freqs": num_freqs,
             },
             path,
         )

@@ -5,8 +5,18 @@ import torch
 from omegaconf import OmegaConf
 
 
-def save_policy_checkpoint(model, processor, args, dataset, step, action_ae=None):
-    destination = Path(args.output_dir) / f"ckpt-{step}"
+def checkpoint_dirname(step, batch_size, world_size, num_freqs):
+    bins = "none" if num_freqs is None else str(int(num_freqs))
+    return f"ckpt-{int(step)}-bs{int(batch_size)}x{int(world_size)}-bins-{bins}"
+
+
+def save_policy_checkpoint(
+    model, processor, args, dataset, step, action_ae=None, world_size=1
+):
+    num_freqs = None if action_ae is None else int(action_ae.num_freqs)
+    destination = Path(args.output_dir) / checkpoint_dirname(
+        step, args.batch_size, world_size, num_freqs
+    )
     destination.mkdir(parents=True, exist_ok=True)
     model.config._name_or_path = ""
     model.save_pretrained(destination, safe_serialization=True)
@@ -37,6 +47,10 @@ def save_policy_checkpoint(model, processor, args, dataset, step, action_ae=None
         "action_dim": args.action_dim,
         "chunk_size": dataset.chunk_size,
         "task_names": dataset.task_names,
+        "batch_size": int(args.batch_size),
+        "world_size": int(world_size),
+        "global_batch_size": int(args.batch_size) * int(world_size),
+        "num_freqs": num_freqs,
     }
     if action_ae is not None:
         cfg = OmegaConf.load(args.action_ae_config)

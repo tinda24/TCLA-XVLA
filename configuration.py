@@ -48,6 +48,22 @@ def load_training_config(path, dotlist=()):
     )
 
 
+def find_ae_checkpoint(ae_dir, step):
+    directory = Path(ae_dir) / "checkpoints"
+    legacy = directory / f"steps_{int(step)}_pytorch_model.pt"
+    if legacy.is_file():
+        return legacy
+    matches = sorted(directory.glob(f"steps_{int(step)}_bs*_bins*_pytorch_model.pt"))
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise FileNotFoundError(f"No AE checkpoint for step {step} in {directory}")
+    raise FileNotFoundError(
+        f"Multiple AE checkpoints for step {step} in {directory}: "
+        + ", ".join(path.name for path in matches)
+    )
+
+
 def policy_config(path, mode, overrides=()):
     cfg = OmegaConf.merge(
         load_paths(),
@@ -84,9 +100,7 @@ def policy_args(cfg):
         ae_dir = Path(absolute_path(cfg.action_ae.run_dir))
         values.update(
             action_ae_config=str(ae_dir / "config.yaml"),
-            action_ae_ckpt=str(
-                ae_dir / "checkpoints" / f"steps_{cfg.action_ae.step}_pytorch_model.pt"
-            ),
+            action_ae_ckpt=str(find_ae_checkpoint(ae_dir, cfg.action_ae.step)),
             action_ae_stats=str(ae_dir / "dataset_statistics.json"),
         )
     for name in (

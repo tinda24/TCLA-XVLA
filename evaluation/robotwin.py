@@ -108,7 +108,25 @@ def evaluate_task(
     }
     output.mkdir(parents=True, exist_ok=True)
     episodes_path = output / "episodes.jsonl"
-    episodes_path.write_text("", encoding="utf-8")
+    # Resume partial runs so interrupted evals are not wiped.
+    if episodes_path.exists():
+        prior = [
+            json.loads(line)
+            for line in episodes_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if prior:
+            completed = len(prior)
+            env.suc = sum(int(bool(row.get("success"))) for row in prior)
+            env.test_num = completed
+            used_seeds = {int(row["seed"]) for row in prior if "seed" in row}
+            if used_seeds:
+                candidate_seed = max(used_seeds) + 1
+            print(f"{task}: resume {env.suc}/{completed}")
+        else:
+            episodes_path.write_text("", encoding="utf-8")
+    else:
+        episodes_path.write_text("", encoding="utf-8")
     while completed < episodes:
         attempts += 1
         if attempts > episodes * 100:
@@ -128,35 +146,72 @@ def evaluate_task(
             env.close_env()
         if not valid:
             continue
-        success = False
-        frames = []
-        trajectory = []
         try:
             env.setup_demo(
                 now_ep_num=completed, seed=selected_seed, is_test=True, **args
             )
+        except Exception as exc:
+            print(f"Eval seed {selected_seed} rejected: {exc}")
+            try:
+                env.close_env()
+            except Exception:
+                pass
+            continue
+        success = False
+        frames = []
+        trajectory = []
+        failed = False
+        try:
             env.actor_pose = True
-            client.reset(task)
-            for _ in range(max_steps):
+            # HDF5 task_name uses spaces, for example "adjust bottle".
+            client.reset(task, language_instruction=task.replace("_", " "))
+            # Official per-task limit from RoboTwin task_config/_eval_step_limit.yml.
+            # max_steps is only the outer ceiling, matching the s1X evaluator.
+            step_lim = getattr(env, "step_lim", None)
+            limit = min(int(max_steps), int(step_lim)) if step_lim else int(max_steps)
+            # One request per action chunk. The client executes that chunk
+            # locally, then reports how many steps actually ran so latent
+            # history does not include unused actions.
+            pending = []
+            executed = 0
+            # Control is 30 Hz; keep every third frame so the video is 10 fps.
+            video_stride = 3
+            for step_index in range(limit):
                 obs = env.get_obs()
                 qpos = qpos_from_obs(obs)
                 trajectory.append(qpos)
-                images = [
-                    obs["observation"][camera_map[name]]["rgb"]
-                    for name in client.metadata["camera_names"]
-                ]
-                action = client.act(qpos, images)
+                if not pending:
+                    if executed:
+                        client.commit(executed)
+                        executed = 0
+                    images = [
+                        obs["observation"][camera_map[name]]["rgb"]
+                        for name in client.metadata["camera_names"]
+                    ]
+                    pending = list(client.plan(qpos, images))
+                action = pending.pop(0)
+                executed += 1
                 env.take_action(action, action_type="qpos")
-                if save_video:
-                    frames.append(env.get_obs()["observation"]["head_camera"]["rgb"])
+                if save_video and step_index % video_stride == 0:
+                    frames.append(obs["observation"]["head_camera"]["rgb"])
                 if env.check_success():
                     success = True
                     trajectory.append(qpos_from_obs(env.get_obs()))
                     break
-                if not env.actor_pose:
+                if getattr(env, "take_action_cnt", 0) >= limit or not env.actor_pose:
                     break
+            if executed:
+                client.commit(executed)
+        except Exception as exc:
+            print(f"Eval seed {selected_seed} failed: {exc}")
+            failed = True
         finally:
-            env.close_env()
+            try:
+                env.close_env()
+            except Exception:
+                pass
+        if failed:
+            continue
         completed += 1
         env.suc += int(success)
         env.test_num = completed
@@ -175,7 +230,7 @@ def evaluate_task(
         if frames:
             import imageio.v2 as imageio
 
-            imageio.mimsave(output / f"{completed}_{int(success)}.mp4", frames, fps=30)
+            imageio.mimsave(output / f"{completed}_{int(success)}.mp4", frames, fps=10)
         print(f"{task}: {env.suc}/{completed}")
     episode_rows = []
     with episodes_path.open(encoding="utf-8") as file:
@@ -205,7 +260,11 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max_steps", type=int, default=3000)
     parser.add_argument("--output")
-    parser.add_argument("--save_video", action="store_true")
+    parser.add_argument(
+        "--save_video",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     args = parser.parse_args()
     paths = load_paths().paths
     output = Path(absolute_path(args.output) if args.output else paths.eval_output)

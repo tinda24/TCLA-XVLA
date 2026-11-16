@@ -127,6 +127,7 @@ def main(args):
                 args,
                 train_dataloader.dataset,
                 global_step,
+                world_size=accelerator.num_processes,
             )
         if global_step >= args.iters:
             break

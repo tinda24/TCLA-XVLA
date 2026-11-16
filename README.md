@@ -82,7 +82,7 @@ Keep task names and language embeddings consistent across AE and policy training
 
 The local AE configs are [RoboTwin](configs/ae/robotwin.yaml) and
 [Franka](configs/ae/franka.yaml), adapted from TCLA's autoencoder training configuration.
-Defaults: 32 action steps, 48 DCT bins, 8 latent tokens of width 16, EMA target
+RoboTwin defaults: 32 action steps, 24 DCT bins, 8 latent tokens of width 16, EMA target
 encoder, language-conditioned Perceiver progress model, and constant learning rate.
 
 ```bash
@@ -125,10 +125,10 @@ bash scripts/train_policy.sh robotwin raw 0
 bash scripts/train_policy.sh robotwin latent 0
 bash scripts/train_policy.sh franka raw 0
 bash scripts/train_policy.sh franka latent 0
-bash scripts/train_policy.sh robotwin latent 0,1 action_ae.step=160000 training.batch_size=16
+bash scripts/train_policy.sh robotwin latent 0,1,2,3,4,5,6,7 action_ae.step=160000
 ```
 
-`training.batch_size` is per GPU. `MAIN_PROCESS_PORT` selects the distributed port;
+`training.batch_size` is per GPU and defaults to 8. The default GPU list is `0,1,2,3,4,5,6,7`, so the default global batch is 64. `MAIN_PROCESS_PORT` selects the distributed port;
 `MIXED_PRECISION=bf16` enables policy mixed precision while AE operations stay fp32.
 `training.freeze_steps` controls the initial VLA backbone learning-rate freeze,
 not the AE. The AE is frozen for all of `latent` training.
@@ -139,7 +139,7 @@ python train.py --config configs/policy/franka.yaml --mode latent --print_config
 python train.py --config configs/policy/robotwin.yaml --mode raw training.iters=50000
 ```
 
-Policy checkpoints are saved under `results/<platform>_policy/<mode>/ckpt-<step>`.
+Policy checkpoints are saved under `results/<platform>_policy/<mode>/ckpt-<step>-bs<batch>x<gpus>-bins-<bins>`, for example `ckpt-10000-bs8x8-bins-24`. Raw uses `bins-none`. `batch` is the per-GPU batch size.
 They contain model/processor files and `policy.json`. Latent checkpoints also
 contain `action_ae_config.yaml`, `action_ae.pt`, `dataset_statistics.json`,
 `qpos_stats.json` and `task_embeddings.json`. Move the entire checkpoint directory
@@ -193,8 +193,9 @@ fine-tuning command in that README, `train.py`, `RobotWin2Handler` in
 `evaluation/robotwin-2.0/client.py`. `X-VLA-Pt` is configured with
 `action_mode=ee6d` and `num_actions=30`.
 
-These settings match the upstream README fine-tuning example: batch size 16 per
-GPU, learning rate `1e-4`, `learning_coef=0.1`, 50000 iterations, 1000 freeze
+These settings match the upstream README fine-tuning example except batch size.
+Upstream uses 16 per GPU. This repository defaults to 8 per GPU on 8 GPUs.
+Learning rate is `1e-4`, `learning_coef=0.1`, 50000 iterations, 1000 freeze
 steps, 2000 warmup steps, AdamW betas `(0.9, 0.95)`, zero weight decay, gradient
 clip 1.0, and no cosine decay. The domain id matches. Upstream `robotwin2_abs_ee` and `robotwin2_clean` share `RobotWin2Handler` and both map to 6 in `datasets/domain_config.py`; the name only selects the data list, and the model consumes the integer. That integer picks row 6 of the 30 soft-prompt rows in `X-VLA-Pt`, and the matching `DomainAwareLinear` weights in the action encoder and decoder. This repository has no domain-name table. `configs/policy/robotwin.yaml` sets `domain_id: 6` directly, and both raw and latent training use that row. The three cameras are head,
 left wrist, and right wrist. Image augmentation is a 224 bicubic resize,

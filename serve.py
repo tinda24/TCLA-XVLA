@@ -32,9 +32,21 @@ def build_app(runtime):
     def act(payload: dict):
         with lock:
             try:
+                if payload.get("plan"):
+                    actions = runtime.plan(payload)
+                    return {"actions": actions.tolist()}
                 return {"action": runtime.act(payload).tolist()}
             except (ValueError, KeyError) as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/commit")
+    def commit(payload: dict):
+        with lock:
+            try:
+                runtime.commit(payload.get("executed", 0))
+            except (ValueError, KeyError) as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True}
 
     return app
 

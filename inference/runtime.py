@@ -78,6 +78,7 @@ class PolicyRuntime:
         self.history = []
         self.action_chunk = None
         self.chunk_index = 0
+        self.pending = None
         self.task_name = task_name
         self.language_instruction = language_instruction
         self.task_emb = None
@@ -119,7 +120,9 @@ class PolicyRuntime:
 
                 instruction = task_prompt_for(task_name)
             else:
-                instruction = task_name
+                # RoboTwin training reads HDF5 task_name, which is the
+                # directory name with underscores replaced by spaces.
+                instruction = task_name.replace("_", " ")
         if self.action_ae is not None:
             if self.task_emb is None:
                 self.reset(task_name, payload.get("task_emb"), instruction)
@@ -179,3 +182,18 @@ class PolicyRuntime:
         if self.action_ae is not None:
             self.history.append(self.normalizer.normalize_action(action))
         return action
+
+    def plan(self, payload):
+        """Return one action chunk without recording it as executed."""
+        self.pending = self._query_chunk(payload)
+        return self.pending
+
+    def commit(self, executed):
+        """Record the prefix of the planned chunk that the client actually ran."""
+        executed = int(executed)
+        if self.pending is None or executed < 0 or executed > len(self.pending):
+            raise ValueError("executed count does not match the planned chunk")
+        if self.action_ae is not None:
+            for action in self.pending[:executed]:
+                self.history.append(self.normalizer.normalize_action(action))
+        self.pending = None

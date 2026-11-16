@@ -76,7 +76,7 @@ Policy 配置中设置 `data.task_names=null` 可以自动发现所有任务目�
 ## 独立训练 Autoencoder
 
 AE 配置位于 [RoboTwin](configs/ae/robotwin.yaml) 和 [Franka](configs/ae/franka.yaml)，
-采用 TCLA 的自编码器训练配置。默认使用 32 步动作块、48 个 DCT 频率分量、
+采用 TCLA 的自编码器训练配置。RoboTwin 默认使用 32 步动作块、24 个 DCT 频率分量、
 8 个 16 维潜变量 token、EMA 目标编码器、语言条件 Perceiver 进度模型及恒定学习率。
 
 ```bash
@@ -116,10 +116,10 @@ bash scripts/train_policy.sh robotwin raw 0
 bash scripts/train_policy.sh robotwin latent 0
 bash scripts/train_policy.sh franka raw 0
 bash scripts/train_policy.sh franka latent 0
-bash scripts/train_policy.sh robotwin latent 0,1 action_ae.step=160000 training.batch_size=16
+bash scripts/train_policy.sh robotwin latent 0,1,2,3,4,5,6,7 action_ae.step=160000
 ```
 
-`training.batch_size` 是每张 GPU 的 batch size。`MAIN_PROCESS_PORT` 设置分布式端口；
+`training.batch_size` 是每张 GPU 的 batch size，默认 8。不传 GPU 列表时使用 `0,1,2,3,4,5,6,7`，全局 batch 是 64。`MAIN_PROCESS_PORT` 设置分布式端口；
 `MIXED_PRECISION=bf16` 开启 Policy 混合精度，AE 运算仍保持 fp32。
 `training.freeze_steps` 控制 VLA 骨干训练初期的学习率冻结，不控制 AE：
 `latent` 全程冻结 AE。
@@ -130,7 +130,7 @@ python train.py --config configs/policy/franka.yaml --mode latent --print_config
 python train.py --config configs/policy/robotwin.yaml --mode raw training.iters=50000
 ```
 
-Policy checkpoint 默认位于 `results/<platform>_policy/<mode>/ckpt-<step>`，包含模型、
+Policy checkpoint 默认位于 `results/<platform>_policy/<mode>/ckpt-<step>-bs<每卡batch>x<卡数>-bins-<bins>`，例如 `ckpt-10000-bs8x8-bins-24`。raw 写为 `bins-none`。目录内包含模型、
 processor 及 `policy.json`。latent checkpoint 还包含 `action_ae_config.yaml`、
 `action_ae.pt`、`dataset_statistics.json`、`qpos_stats.json` 和 `task_embeddings.json`。
 部署时迁移整个 checkpoint 目录即可。Policy checkpoint 是推理导出文件，不含优化器恢复状态。
@@ -179,7 +179,7 @@ RoboTwin2 微调、推理。对照对象是仓库 README 中的微调命令、`t
 `evaluation/robotwin-2.0/client.py`。预训练权重 `X-VLA-Pt` 的配置是
 `action_mode=ee6d`、`num_actions=30`。
 
-以下项与上游 README 微调示例一致：每卡 batch 16、学习率 `1e-4`、
+学习率和日程与上游 README 微调示例一致。上游示例是每卡 batch 16；本仓库默认每卡 8、8 卡。学习率 `1e-4`、
 `learning_coef=0.1`、50000 iter、冻结 1000 step、warmup 2000 step、
 AdamW `(0.9, 0.95)`、weight decay 0、梯度裁剪 1.0、关闭 cosine。
 domain id 对齐。上游 `robotwin2_abs_ee` 和 `robotwin2_clean` 共用 `RobotWin2Handler`，在 `datasets/domain_config.py` 里都映射为 6；域名只选择数据列表，模型使用的是这个整数。它从 `X-VLA-Pt` 的 30 行 soft prompt 中取出第 6 行，并选择动作编码器、动作解码器里 `DomainAwareLinear` 的第 6 组权重。本仓库没有域名表，`configs/policy/robotwin.yaml` 直接写 `domain_id: 6`，raw 和 latent 都用这一行。三路相机是 head、左腕、右腕。图像增强是 224 双三次缩放、

@@ -7,7 +7,7 @@ case "$mode" in
   raw|latent) ;;
   *) echo "Policy mode must be raw or latent" >&2; exit 2 ;;
 esac
-gpus="${3:-0}"
+gpus="${3:-0,1,2,3,4,5,6,7}"
 shift "$(( $# >= 3 ? 3 : $# ))"
 IFS=',' read -r -a devices <<< "$gpus"
 distributed=()
